@@ -5,6 +5,12 @@
   "references": [
     {
       "path": "./libs/proto"
+    },
+    {
+      "path": "./apps/grpc-server-e2e"
+    },
+    {
+      "path": "./apps/grpc-server"
     }
   ]
 }
