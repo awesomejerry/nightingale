@@ -11,6 +11,12 @@
     },
     {
       "path": "./apps/grpc-server"
+    },
+    {
+      "path": "./apps/web-app-e2e"
+    },
+    {
+      "path": "./apps/web-app"
     }
   ]
 }
