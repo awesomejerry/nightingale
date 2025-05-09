@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-describe('GET /', () => {
-  it('should return a message', async () => {
-    const res = await axios.get(`/`);
+describe('tRPC hello endpoint', () => {
+  it('should return the input message', async () => {
+    const res = await axios.get(`/hello?input=${encodeURIComponent(JSON.stringify({ name: 'World' }))}`);
 
     expect(res.status).toBe(200);
-    expect(res.data).toEqual({ message: 'Hello API' });
+    expect(res.data.result.data).toEqual({ message: 'World'});
   });
 });

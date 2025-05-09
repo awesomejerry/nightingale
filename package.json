@@ -4,12 +4,14 @@
   "license": "MIT",
   "scripts": {
     "dev:grpc": "nx serve grpc-server",
-    "dev:web": "nx serve web-app"
+    "dev:web": "nx serve web-app",
+    "dev:trpc": "nx serve trpc-server"
   },
   "private": true,
   "dependencies": {
     "@grpc/grpc-js": "^1.13.3",
     "@grpc/proto-loader": "^0.7.15",
+    "@trpc/server": "^11.1.2",
     "axios": "^1.6.0",
     "express": "^4.21.2",
     "react": "19.0.0",
@@ -59,7 +61,7 @@
     "jiti": "2.4.2",
     "jsdom": "~22.1.0",
     "jsonc-eslint-parser": "^2.1.0",
-    "nx": "21.0.2",
+    "nx": "^21.0.3",
     "postcss": "8.4.38",
     "prettier": "^2.6.2",
     "sass": "^1.55.0",
