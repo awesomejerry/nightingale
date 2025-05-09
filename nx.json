@@ -40,7 +40,7 @@
       "options": {
         "targetName": "test"
       },
-      "exclude": ["apps/grpc-server-e2e/**/*"]
+      "exclude": ["apps/grpc-server-e2e/**/*", "apps/trpc-server-e2e/**/*"]
     },
     {
       "plugin": "@nx/react/router-plugin",

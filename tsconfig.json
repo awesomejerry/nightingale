@@ -17,6 +17,12 @@
     },
     {
       "path": "./apps/web-app"
+    },
+    {
+      "path": "./apps/trpc-server-e2e"
+    },
+    {
+      "path": "./apps/trpc-server"
     }
   ]
 }
