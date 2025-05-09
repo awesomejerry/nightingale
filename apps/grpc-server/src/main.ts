@@ -1,14 +1,30 @@
-import express from 'express';
+import * as grpc from '@grpc/grpc-js';
+import * as protoLoader from '@grpc/proto-loader';
+import path from 'path';
+import { HelloRequest, HelloReply, GreeterServer } from '@nightingale/proto';
 
-const host = process.env.HOST ?? 'localhost';
-const port = process.env.PORT ? Number(process.env.PORT) : 3000;
+const PROTO_PATH = path.join(process.cwd(), 'libs/proto/src/index.proto');
+const pkgDef = protoLoader.loadSync(PROTO_PATH);
+const grpcObj = grpc.loadPackageDefinition(pkgDef);
+const GreeterService = (grpcObj.nightingale as any).Greeter;
 
-const app = express();
+const sayHello: GreeterServer['sayHello'] = (
+  call: grpc.ServerUnaryCall<HelloRequest, HelloReply>,
+  callback: grpc.sendUnaryData<HelloReply>
+) => {
+  try {
+    const response: HelloReply = { message: call.request.name };
+    callback(null, response);
+  } catch (err) {
+    callback({
+      code: grpc.status.INTERNAL,
+      message: err instanceof Error ? err.message : 'Unknown error'
+    }, null);
+  }
+};
 
-app.get('/', (req, res) => {
-  res.send({ message: 'Hello API' });
-});
-
-app.listen(port, host, () => {
-  console.log(`[ ready ] http://${host}:${port}`);
+const server = new grpc.Server();
+server.addService(GreeterService.service, { SayHello: sayHello });
+server.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), () => {
+  console.log('gRPC Server listening on :50051');
 });

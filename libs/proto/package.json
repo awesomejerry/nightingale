@@ -17,5 +17,18 @@
   },
   "dependencies": {
     "tslib": "^2.3.0"
+  },
+  "nx": {
+    "targets": {
+      "generate": {
+        "executor": "nx:run-commands",
+        "options": {
+          "commands": [
+            "protoc --plugin=protoc-gen-ts_proto=./node_modules/.bin/protoc-gen-ts_proto --ts_proto_out=./libs/proto/src/generated --ts_proto_opt=outputServices=grpc-js,useOptionals=messages -I libs/proto/src libs/proto/src/*.proto"
+          ],
+          "parallel": false
+        }
+      }
+    }
   }
 }

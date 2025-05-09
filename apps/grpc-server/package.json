@@ -2,6 +2,7 @@
   "name": "@nightingale/grpc-server",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "nx": {
     "targets": {
       "build": {
@@ -14,7 +15,7 @@
           "platform": "node",
           "outputPath": "apps/grpc-server/dist",
           "format": [
-            "cjs"
+            "esm"
           ],
           "bundle": false,
           "main": "apps/grpc-server/src/main.ts",
