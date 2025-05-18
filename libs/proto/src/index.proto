@@ -3,7 +3,12 @@ package nightingale;
 
 service Greeter {
   rpc SayHello(HelloRequest) returns (HelloReply);
+  rpc SayHelloStream(HelloRequest) returns (stream HelloEventReply);
 }
 
 message HelloRequest { string name = 1; }
 message HelloReply   { string message = 1; }
+message HelloEventReply { 
+  string message = 1;
+  string step = 2;     // Indicates the current processing step
+}

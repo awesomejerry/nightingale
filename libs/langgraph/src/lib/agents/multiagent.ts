@@ -37,6 +37,9 @@ const AgentStateAnnotation = Annotation.Root({
 // For type safety
 type AgentState = typeof AgentStateAnnotation.State;
 
+// Define event callback type
+export type AgentEventCallback = (step: string, message: string) => void;
+
 export class MultiAgent {
   private graph: any; // Using any temporarily to avoid complex typing
   private welcomeAgent: WelcomeAgent;
@@ -59,7 +62,7 @@ export class MultiAgent {
        "Based on the conversation, decide which agent should act next:\n" +
        "- 'welcomeAgent': Get a welcome greeting for the user\n" +
        "- 'poemAgent': Create a poem based on the greeting\n" +
-       "- 'complete': End the conversation if greetings and poem are made\n\n" +
+       "- 'complete': End the conversation if greeting and poem are made\n\n" +
        "Reply with just one word: 'welcome', 'poem', or 'complete'."
       ]
     ]);
@@ -225,6 +228,105 @@ export class MultiAgent {
       return await this.graph.invoke(initialState, config);
     } catch (error) {
       console.error('Error in MultiAgent workflow:', error);
+      throw error;
+    }
+  }
+
+  async runWithEvents(userInput: string, onEvent: AgentEventCallback): Promise<typeof AgentStateAnnotation.State> {
+    try {
+      // Notify that we're starting
+      onEvent('start', `Processing request: "${userInput}"`);
+
+      // Initialize conversation state with user input
+      const initialState = {
+        messages: [{ role: 'user', content: userInput }]
+      };
+
+      // Use the streamEvents method from LangGraph to properly get event streams
+      // This allows us to tap into the graph execution events
+      const eventStream = this.graph.streamEvents(initialState, { version: "v2" });
+      
+      // Process each event as it occurs and create our custom events
+      let finalResult: typeof AgentStateAnnotation.State = initialState as any;
+      
+      for await (const evt of eventStream) {
+        try {
+          switch (evt.event) {
+            // Node entry and exit events  
+            case "on_chain_start":
+            case "on_node_start":
+              if (evt.name) {
+                const nodeName = evt.name;
+                switch (nodeName) {
+                  case 'coordinator':
+                    onEvent('coordinator', 'Determining next action...');
+                    break;
+                  case 'welcomeAgent':
+                    onEvent('welcomeAgent', 'Generating welcome greeting...');
+                    break;
+                  case 'poemAgent':
+                    onEvent('poemAgent', 'Creating poem based on greeting...');
+                    break;
+                }
+              }
+              break;
+              
+            case "on_node_end":
+              if (evt.name && evt.data?.state) {
+                const nodeName = evt.name;
+                const state = evt.data.state;
+                
+                switch (nodeName) {
+                  case 'coordinator':
+                    if (state.next) {
+                      onEvent('coordinator', `Decided next step: ${state.next}`);
+                    }
+                    break;
+                  case 'welcomeAgent':
+                    if (state.greeting) {
+                      onEvent('welcomeAgent', state.greeting);
+                    }
+                    break;
+                  case 'poemAgent':
+                    if (state.poem) {
+                      onEvent('poemAgent', state.poem);
+                    }
+                    break;
+                }
+                
+                // Always update our final result
+                finalResult = state;
+              }
+              break;
+            case "on_chain_end":
+                finalResult = evt.data.output;
+                break;
+              
+            // LLM events
+            case "on_llm_start":
+              if (evt.name) {
+                onEvent(evt.name, `${evt.name} is thinking...`);
+              } else {
+                onEvent('thinking', 'Agent is processing...');
+              }
+              break;
+              
+            case "on_llm_stream":
+              if (evt.data?.chunk) {
+                onEvent('stream', `Agent is generating: ${evt.data.chunk}`);
+              }
+              break;
+          }
+        } catch (err) {
+          // Ignore errors in event processing
+          console.error('Error processing event:', err);
+        }
+      }
+      
+      return finalResult;
+    } catch (error) {
+      console.error('Error in MultiAgent workflow:', error);
+      onEvent('error', `Error occurred: ${error instanceof Error ? error.message : 'Unknown error'}`);
       throw error;
     }
   }
