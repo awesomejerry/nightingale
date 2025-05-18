@@ -23,6 +23,9 @@
     },
     {
       "path": "./apps/trpc-server"
+    },
+    {
+      "path": "./libs/langgraph"
     }
   ]
 }

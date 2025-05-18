@@ -4,6 +4,9 @@
   "include": [],
   "references": [
     {
+      "path": "../../libs/langgraph"
+    },
+    {
       "path": "../../libs/proto"
     },
     {

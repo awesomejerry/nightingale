@@ -2,18 +2,25 @@ import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
 import { HelloRequest, HelloReply, GreeterServer } from '@nightingale/proto';
+import { WelcomeAgent } from '@nightingale/langgraph';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 const PROTO_PATH = path.join(process.cwd(), 'libs/proto/src/index.proto');
 const pkgDef = protoLoader.loadSync(PROTO_PATH);
 const grpcObj = grpc.loadPackageDefinition(pkgDef);
 const GreeterService = (grpcObj.nightingale as any).Greeter;
 
-const sayHello: GreeterServer['sayHello'] = (
+const welcomeAgent = new WelcomeAgent(process.env.OPENAI_API_KEY);
+
+const sayHello: GreeterServer['sayHello'] = async (
   call: grpc.ServerUnaryCall<HelloRequest, HelloReply>,
   callback: grpc.sendUnaryData<HelloReply>
 ) => {
   try {
-    const response: HelloReply = { message: `Hello ${call.request.name}` };
+    const greeting = await welcomeAgent.greet(call.request.name);
+    const response: HelloReply = { message: greeting };
     callback(null, response);
   } catch (err) {
     callback(
