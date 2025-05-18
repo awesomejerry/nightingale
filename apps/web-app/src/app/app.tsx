@@ -13,7 +13,7 @@ export function App() {
         {hello.error && (
           <p style={{ color: 'red' }}>Error: {hello.error.message}</p>
         )}
-        {hello.data && <p>Server says: {hello.data.message}</p>}
+        {hello.data && <p>tRPC Server says: {hello.data.message}</p>}
       </div>
     </div>
   );

@@ -26,7 +26,9 @@ const appRouter = t.router({
           });
         }
       );
-      return response;
+      return {
+        message: `gRPC Server says: ${response.message}`,
+      };
     }),
 });
 
