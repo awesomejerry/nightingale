@@ -13,18 +13,25 @@ const sayHello: GreeterServer['sayHello'] = (
   callback: grpc.sendUnaryData<HelloReply>
 ) => {
   try {
-    const response: HelloReply = { message: call.request.name };
+    const response: HelloReply = { message: `Hello ${call.request.name}` };
     callback(null, response);
   } catch (err) {
-    callback({
-      code: grpc.status.INTERNAL,
-      message: err instanceof Error ? err.message : 'Unknown error'
-    }, null);
+    callback(
+      {
+        code: grpc.status.INTERNAL,
+        message: err instanceof Error ? err.message : 'Unknown error',
+      },
+      null
+    );
   }
 };
 
 const server = new grpc.Server();
 server.addService(GreeterService.service, { SayHello: sayHello });
-server.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), () => {
-  console.log('gRPC Server listening on :50051');
-});
+server.bindAsync(
+  '0.0.0.0:50051',
+  grpc.ServerCredentials.createInsecure(),
+  () => {
+    console.log('gRPC Server listening on :50051');
+  }
+);
