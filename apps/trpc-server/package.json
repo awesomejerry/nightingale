@@ -1,7 +1,7 @@
 {
   "name": "@nightingale/trpc-server",
   "version": "0.0.1",
-  "private": true,
+  "type": "module",
   "nx": {
     "targets": {
       "build": {
@@ -14,7 +14,7 @@
           "platform": "node",
           "outputPath": "apps/trpc-server/dist",
           "format": [
-            "cjs"
+            "esm"
           ],
           "bundle": false,
           "main": "apps/trpc-server/src/main.ts",
