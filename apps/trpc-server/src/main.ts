@@ -5,6 +5,10 @@ import * as trpcExpress from '@trpc/server/adapters/express';
 import { z } from 'zod';
 import * as grpc from '@grpc/grpc-js';
 import { GreeterClient } from '@nightingale/proto';
+import { runSwarmStream } from '@nightingale/langgraph';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 
 const t = trpc.initTRPC.create({
@@ -154,6 +158,41 @@ const appRouter = t.router({
         result: response.result,
         status: response.status,
       };
+    }),
+
+  swarmStream: t.procedure
+    .input(z.object({
+      request: z.string().describe("The user request for the swarm agents")
+    }))
+    .subscription(async function* ({ input }) {
+      try {
+        // Log the request for debugging
+        console.log(`Swarm request: ${input.request}`);
+
+        // Call the swarm stream function
+        const stream = await runSwarmStream(input.request);
+
+        // Process the stream and yield results
+        for await (const chunk of stream) {
+          const [agent, rawResponse] = Object.entries(chunk)[0];
+          // Validate response structure
+          const response = rawResponse as { messages?: { content: string }[] };
+          if (response?.messages && response.messages.length > 0) {
+            const lastMessage = response.messages[response.messages.length - 1];
+            yield {
+              message: lastMessage.content || '',
+              agent: agent || 'unknown',
+              timestamp: new Date().toISOString()
+            };
+          }
+        }
+      } catch (error) {
+        yield {
+          message: `Error in swarm: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          agent: 'error',
+          timestamp: new Date().toISOString()
+        };
+      }
     }),
 });
 

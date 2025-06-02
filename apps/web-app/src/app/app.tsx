@@ -11,6 +11,11 @@ export function App() {
   const [streamMessages, setStreamMessages] = useState<Array<{ message: string; step: string }>>([]);
   const [isStreaming, setIsStreaming] = useState(false);
 
+  // New state for swarm
+  const [swarmRequest, setSwarmRequest] = useState('first book a flight from BOS to JFK and then book a stay at McKittrick Hotel');
+  const [swarmMessages, setSwarmMessages] = useState<Array<{ message: string; agent: string; timestamp: string }>>([]);
+  const [isSwarmStreaming, setIsSwarmStreaming] = useState(false);
+
   const hello = trpc.hello.useQuery(
     { name: nameInput },
     { enabled: false },
@@ -31,6 +36,27 @@ export function App() {
       },
       onComplete: () => {
         setIsStreaming(false);
+      },
+    }
+  );
+
+  // tRPC subscription for swarm streaming
+  const swarmStreamSubscription = trpc.swarmStream.useSubscription(
+    isSwarmStreaming && !!swarmRequest.trim() ? { request: swarmRequest } : skipToken,
+    {
+      onData: (data) => {
+        setSwarmMessages((prev) => [...prev, {
+          message: data.message || '',
+          agent: data.agent || '',
+          timestamp: data.timestamp || '',
+        }]);
+      },
+      onError: (error) => {
+        console.error('Swarm stream error:', error);
+        setIsSwarmStreaming(false);
+      },
+      onComplete: () => {
+        setIsSwarmStreaming(false);
       },
     }
   );
@@ -59,6 +85,17 @@ export function App() {
 
   const stopStreaming = () => {
     setIsStreaming(false);
+  };
+
+  const startSwarmStreaming = () => {
+    if (!swarmRequest.trim()) return;
+
+    setIsSwarmStreaming(true);
+    setSwarmMessages([]);
+  };
+
+  const stopSwarmStreaming = () => {
+    setIsSwarmStreaming(false);
   };
 
   return (
@@ -168,6 +205,60 @@ export function App() {
         {helloStreamSubscription.error && (
           <p style={{ color: 'red' }}>
             Stream Error: {helloStreamSubscription.error.message}
+          </p>
+        )}
+      </div>
+
+      <div style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: '20px' }}>
+        <h2>Swarm Agents (Multi-Agent Coordination)</h2>
+        <div>
+          <input
+            type="text"
+            value={swarmRequest}
+            onChange={(e) => setSwarmRequest(e.target.value)}
+            placeholder="Enter a request for swarm agents (e.g., 'book a flight then a hotel')"
+            style={{ width: '400px' }}
+          />
+          <button
+            onClick={startSwarmStreaming}
+            style={{ marginLeft: '8px' }}
+            disabled={isSwarmStreaming || !swarmRequest.trim()}
+          >
+            {isSwarmStreaming ? 'Processing...' : 'Start Swarm'}
+          </button>
+          {isSwarmStreaming && (
+            <button
+              onClick={stopSwarmStreaming}
+              style={{ marginLeft: '8px', backgroundColor: '#dc3545', color: 'white' }}
+            >
+              Stop Swarm
+            </button>
+          )}
+        </div>
+        {swarmMessages.length > 0 && (
+          <div style={{ marginTop: '10px' }}>
+            <h3>Swarm Messages:</h3>
+            <div style={{
+              background: '#f5f5f5',
+              padding: '10px',
+              borderRadius: '4px',
+              maxHeight: '300px',
+              overflowY: 'auto'
+            }}>
+              {swarmMessages.map((msg, index) => (
+                <div key={index} style={{ marginBottom: '8px', padding: '5px', borderLeft: '3px solid #007acc' }}>
+                  <div style={{ fontSize: '12px', color: '#666', marginBottom: '2px' }}>
+                    <strong>Agent:</strong> {msg.agent} | <strong>Time:</strong> {new Date(msg.timestamp).toLocaleTimeString()}
+                  </div>
+                  <div>{msg.message}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {swarmStreamSubscription.error && (
+          <p style={{ color: 'red' }}>
+            Swarm Error: {swarmStreamSubscription.error.message}
           </p>
         )}
       </div>
