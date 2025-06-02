@@ -2,10 +2,14 @@
 // import styles from './app.module.scss';
 import { trpc } from '../trpc';
 import { useState } from 'react';
+import { skipToken } from '@tanstack/react-query';
 
 export function App() {
   const [nameInput, setNameInput] = useState('');
   const [supervisorTask, setSupervisorTask] = useState("what's the combined headcount of the FAANG companies in 2024??");
+  const [streamName, setStreamName] = useState('');
+  const [streamMessages, setStreamMessages] = useState<Array<{ message: string; step: string }>>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const hello = trpc.hello.useQuery(
     { name: nameInput },
@@ -13,6 +17,23 @@ export function App() {
   );
 
   const supervisorMutation = trpc.supervisor.useMutation();
+
+  // tRPC subscription for streaming
+  const helloStreamSubscription = trpc.helloStream.useSubscription(
+    isStreaming && !!streamName.trim() ? { name: streamName } : skipToken,
+    {
+      onData: (data) => {
+        setStreamMessages((prev) => [...prev, data]);
+      },
+      onError: (error) => {
+        console.error('Stream error:', error);
+        setIsStreaming(false);
+      },
+      onComplete: () => {
+        setIsStreaming(false);
+      },
+    }
+  );
 
   const fetchData = () => {
     if (nameInput.trim() !== '') {
@@ -27,6 +48,17 @@ export function App() {
         context: 'Web app request'
       });
     }
+  };
+
+  const startStreaming = () => {
+    if (!streamName.trim()) return;
+
+    setIsStreaming(true);
+    setStreamMessages([]);
+  };
+
+  const stopStreaming = () => {
+    setIsStreaming(false);
   };
 
   return (
@@ -87,6 +119,56 @@ export function App() {
               {supervisorMutation.data.result}
             </pre>
           </div>
+        )}
+      </div>
+
+      <div style={{ marginTop: 32, borderTop: '1px solid #ccc', paddingTop: '20px' }}>
+        <h2>Streaming Hello (tRPC SSE)</h2>
+        <div>
+          <input
+            type="text"
+            value={streamName}
+            onChange={(e) => setStreamName(e.target.value)}
+            placeholder="Enter a name for streaming"
+          />
+          <button
+            onClick={startStreaming}
+            style={{ marginLeft: '8px' }}
+            disabled={isStreaming || !streamName.trim()}
+          >
+            {isStreaming ? 'Streaming...' : 'Start Stream'}
+          </button>
+          {isStreaming && (
+            <button
+              onClick={stopStreaming}
+              style={{ marginLeft: '8px', backgroundColor: '#dc3545', color: 'white' }}
+            >
+              Stop Stream
+            </button>
+          )}
+        </div>
+        {streamMessages.length > 0 && (
+          <div style={{ marginTop: '10px' }}>
+            <h3>Stream Messages:</h3>
+            <div style={{
+              background: '#f5f5f5',
+              padding: '10px',
+              borderRadius: '4px',
+              maxHeight: '200px',
+              overflowY: 'auto'
+            }}>
+              {streamMessages.map((msg, index) => (
+                <div key={index} style={{ marginBottom: '5px' }}>
+                  <strong>Step {msg.step}:</strong> {msg.message}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {helloStreamSubscription.error && (
+          <p style={{ color: 'red' }}>
+            Stream Error: {helloStreamSubscription.error.message}
+          </p>
         )}
       </div>
     </div>

@@ -1,13 +1,19 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { trpc } from './trpc';
-import { httpBatchLink } from '@trpc/client';
+import { httpBatchLink, splitLink, httpSubscriptionLink } from '@trpc/client';
 import React from 'react';
 
 const queryClient = new QueryClient();
 const trpcClient = trpc.createClient({
   links: [
-    httpBatchLink({
-      url: 'http://localhost:4000/trpc', // Updated to match trpc-server
+    splitLink({
+      condition: (op) => op.type === 'subscription',
+      true: httpSubscriptionLink({
+        url: 'http://localhost:4000/trpc',
+      }),
+      false: httpBatchLink({
+        url: 'http://localhost:4000/trpc',
+      }),
     }),
   ],
 });

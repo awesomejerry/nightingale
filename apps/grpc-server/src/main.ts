@@ -1,16 +1,10 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
-import { HelloRequest, HelloReply, SupervisorRequest, SupervisorReply, GreeterServer } from '@nightingale/proto';
+import { HelloRequest, HelloReply, SupervisorRequest, SupervisorReply, GreeterServer, HelloEventReply } from '@nightingale/proto';
 // import { PoemAgent, WelcomeAgent } from '@nightingale/langgraph';
 import { MultiAgent, AgentEventCallback, runSupervisor } from '@nightingale/langgraph';
 import dotenv from 'dotenv';
-
-// Define the HelloEventReply interface manually since there might be an issue with auto-generation
-interface HelloEventReply {
-  message: string;
-  step: string;
-}
 
 dotenv.config();
 
