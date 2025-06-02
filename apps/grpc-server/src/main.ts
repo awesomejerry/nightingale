@@ -1,9 +1,9 @@
 import * as grpc from '@grpc/grpc-js';
 import * as protoLoader from '@grpc/proto-loader';
 import path from 'path';
-import { HelloRequest, HelloReply, GreeterServer } from '@nightingale/proto';
+import { HelloRequest, HelloReply, SupervisorRequest, SupervisorReply, GreeterServer } from '@nightingale/proto';
 // import { PoemAgent, WelcomeAgent } from '@nightingale/langgraph';
-import { MultiAgent, AgentEventCallback } from '@nightingale/langgraph';
+import { MultiAgent, AgentEventCallback, runSupervisor } from '@nightingale/langgraph';
 import dotenv from 'dotenv';
 
 // Define the HelloEventReply interface manually since there might be an issue with auto-generation
@@ -17,6 +17,7 @@ dotenv.config();
 const PROTO_PATH = path.join(process.cwd(), 'libs/proto/src/index.proto');
 const pkgDef = protoLoader.loadSync(PROTO_PATH);
 const grpcObj = grpc.loadPackageDefinition(pkgDef);
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const GreeterService = (grpcObj.nightingale as any).Greeter;
 
 // const welcomeAgent = new WelcomeAgent(process.env.OPENAI_API_KEY);
@@ -32,7 +33,7 @@ const sayHello: GreeterServer['sayHello'] = async (
     // const poem = await poemAgent.composePoem(greeting);
     // const response: HelloReply = { message: poem };
     const result = await multiAgent.run(call.request.name);
-    const response: HelloReply = { message: result.poem };
+    const response: HelloReply = { message: result || 'no result from agent' };
     callback(null, response);
   } catch (err) {
     callback(
@@ -54,13 +55,13 @@ const sayHelloStream = (call: grpc.ServerWritableStream<HelloRequest, HelloEvent
     // Create a callback function to handle events
     const onEvent: AgentEventCallback = (step, message) => {
       console.log(`[${step}] ${message}`);
-      
+
       // Send the event as a streaming response
-      const response: HelloEventReply = { 
+      const response: HelloEventReply = {
         message: message,
         step: step
       };
-      
+
       call.write(response);
     };
 
@@ -77,7 +78,7 @@ const sayHelloStream = (call: grpc.ServerWritableStream<HelloRequest, HelloEvent
       })
       .catch((err) => {
         console.error('Error in streaming service:', err);
-        
+
         // Send error message if not already sent by event handler
         const errorResponse: HelloEventReply = {
           message: err instanceof Error ? err.message : 'Unknown error',
@@ -98,10 +99,55 @@ const sayHelloStream = (call: grpc.ServerWritableStream<HelloRequest, HelloEvent
   }
 };
 
+const runSupervisorHandler: GreeterServer['runSupervisor'] = async (
+  call: grpc.ServerUnaryCall<SupervisorRequest, SupervisorReply>,
+  callback: grpc.sendUnaryData<SupervisorReply>
+) => {
+  try {
+    console.log(`Running supervisor for task: ${call.request.task}`);
+    console.log(`Context: ${call.request.context}`);
+
+    // Run the supervisor workflow
+    const result = await runSupervisor(call.request.task);
+
+    // Extract the final result from the supervisor's response
+    const finalMessage = result.messages[result.messages.length - 1];
+    let supervisorResult = 'Supervisor completed successfully';
+
+    if (finalMessage?.content) {
+      if (typeof finalMessage.content === 'string') {
+        supervisorResult = finalMessage.content;
+      } else if (Array.isArray(finalMessage.content)) {
+        // Handle MessageContentComplex[] case
+        supervisorResult = finalMessage.content
+          .map((item: Record<string, unknown>) => item.text || item.content || '')
+          .join('');
+      }
+    }
+
+    const response: SupervisorReply = {
+      result: supervisorResult,
+      status: 'completed'
+    };
+
+    callback(null, response);
+  } catch (err) {
+    console.error('Error in supervisor:', err);
+    callback(
+      {
+        code: grpc.status.INTERNAL,
+        message: err instanceof Error ? err.message : 'Unknown error in supervisor',
+      },
+      null
+    );
+  }
+};
+
 const server = new grpc.Server();
-server.addService(GreeterService.service, { 
+server.addService(GreeterService.service, {
   SayHello: sayHello,
-  SayHelloStream: sayHelloStream
+  SayHelloStream: sayHelloStream,
+  RunSupervisor: runSupervisorHandler
 });
 server.bindAsync(
   '0.0.0.0:50051',

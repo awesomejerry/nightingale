@@ -30,6 +30,35 @@ const appRouter = t.router({
         message: `gRPC Server says: ${response.message}`,
       };
     }),
+
+  supervisor: t.procedure
+    .input(z.object({
+      task: z.string(),
+      context: z.string().optional().default('')
+    }))
+    .mutation(async ({ input }) => {
+      // Create gRPC client
+      const client = new GreeterClient(
+        'localhost:50051',
+        grpc.credentials.createInsecure()
+      );
+      // Wrap gRPC call in a Promise
+      const response = await new Promise<{ result: string; status: string }>(
+        (resolve, reject) => {
+          client.runSupervisor({
+            task: input.task,
+            context: input.context
+          }, (err, res) => {
+            if (err) return reject(err);
+            resolve(res);
+          });
+        }
+      );
+      return {
+        result: response.result,
+        status: response.status,
+      };
+    }),
 });
 
 export type AppRouter = typeof appRouter;

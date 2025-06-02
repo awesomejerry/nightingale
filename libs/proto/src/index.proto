@@ -4,6 +4,7 @@ package nightingale;
 service Greeter {
   rpc SayHello(HelloRequest) returns (HelloReply);
   rpc SayHelloStream(HelloRequest) returns (stream HelloEventReply);
+  rpc RunSupervisor(SupervisorRequest) returns (SupervisorReply);
 }
 
 message HelloRequest { string name = 1; }
@@ -11,4 +12,14 @@ message HelloReply   { string message = 1; }
 message HelloEventReply { 
   string message = 1;
   string step = 2;     // Indicates the current processing step
+}
+
+message SupervisorRequest {
+  string task = 1;     // The task to be supervised
+  string context = 2;  // Additional context for the supervisor
+}
+
+message SupervisorReply {
+  string result = 1;   // The result of the supervision
+  string status = 2;   // Status of the operation (e.g., "completed", "failed", "in_progress")
 }

@@ -32,6 +32,10 @@ const AgentStateAnnotation = Annotation.Root({
     reducer: (_, newVal) => newVal || "",
     default: () => "",
   }),
+  lastCoordinatorDecision: Annotation<string>({
+    reducer: (_, newVal) => newVal || "",
+    default: () => "",
+  }),
 });
 
 // For type safety
@@ -50,20 +54,41 @@ export class MultiAgent {
     this.poemAgent = new PoemAgent(apiKey);
 
     // Create the coordinator agent which will decide next steps
-    const llm = new ChatOpenAI({ 
-      model: 'gpt-4o-mini', 
-      openAIApiKey: apiKey ?? process.env.OPENAI_API_KEY 
+    const llm = new ChatOpenAI({
+      model: 'gpt-4o',
+      openAIApiKey: apiKey ?? process.env.OPENAI_API_KEY
     });
 
     const coordinatorPrompt = ChatPromptTemplate.fromMessages([
-      ["system", "You are a coordinator agent that determines the next step in a conversation flow."],
+      ["system",
+        "You are a coordinator agent. Your role is to analyze the full conversation history provided in 'messages' and decide the current state of the conversation. " +
+        "You must reply with only one of the specified keywords. Follow the logic conditions strictly."
+      ],
       new MessagesPlaceholder("messages"),
-      ["user", 
-       "Based on the conversation, decide which agent should act next:\n" +
-       "- 'welcomeAgent': Get a welcome greeting for the user\n" +
-       "- 'poemAgent': Create a poem based on the greeting\n" +
-       "- 'complete': End the conversation if greeting and poem are made\n\n" +
-       "Reply with just one word: 'welcome', 'poem', or 'complete'."
+      ["user",
+        "Carefully analyze the provided 'messages' history. Based on this analysis, determine the current state of the conversation by following these conditions in order. Reply with a single keyword ONLY.\n\n" +
+
+        "1. **Is Clarification Needed?**\n" +
+        "   - Examine the VERY LAST message in the 'messages' history.\n" +
+        "   - IF the last message is from an 'assistant' AND it is an EXPLICIT question to the user (e.g., 'What is your name?', 'What topic do you want for the poem?'),\n" +
+        "   THEN reply with `NEEDS_CLARIFICATION`.\n\n" +
+
+        "2. **Does the Conversation Need a Welcome Greeting?** (Only check if condition 1 is NOT met)\n" +
+        "   - Count how many messages from an 'assistant' in the 'messages' history appear to be a greeting (e.g., contain 'hello', 'welcome', 'hi there', 'nice to meet you', 'greetings').\n" +
+        "   - IF there are ZERO such 'assistant' greeting messages, OR IF the entire 'messages' history consists of only ONE message AND that message is from the 'user',\n" +
+        "   THEN reply with `NEEDS_WELCOME`.\n\n" +
+
+        "3. **Is a Poem Due?** (Only check if conditions 1 and 2 are NOT met)\n" +
+        "   - (This implies a greeting from an 'assistant' IS present in the history and no clarification is needed).\n" +
+        "   - Count how many messages from an 'assistant' in the 'messages' history appear to contain a completed poem (look for multiple lines, thematic words, or phrases like 'here is your poem').\n" +
+        "   - IF there are ZERO such 'assistant' messages containing a poem,\n" +
+        "   THEN reply with `NEEDS_POEM`.\n\n" +
+
+        "4. **Is the Conversation Complete?** (Only check if conditions 1, 2, and 3 are NOT met)\n" +
+        "   - (This implies no clarification is needed, an 'assistant' greeting IS present, and an 'assistant' poem IS present in the history).\n" +
+        "   THEN reply with `IS_COMPLETE`.\n\n" +
+
+        "Reply with only one of these keywords: `NEEDS_CLARIFICATION`, `NEEDS_WELCOME`, `NEEDS_POEM`, `IS_COMPLETE`."
       ]
     ]);
 
@@ -72,58 +97,49 @@ export class MultiAgent {
     // Define node functions
     const coordinatorNode = async (state: AgentState) => {
       try {
-        // Default to welcoming if this is the first interaction
-        if (state.messages.length === 1 && state.messages[0].role === 'user') {
-          return {
-            next: 'welcomeAgent'
-          };
-        }
+        console.log("Coordinator: Current state messages:", JSON.stringify(state.messages, null, 2));
 
-        // If we have a greeting but no poem yet, suggest poem as the next step
-        if (state.greeting && !state.poem) {
-          return {
-            next: 'poemAgent'
-          };
-        }
-
-        
-        // Otherwise use the LLM to decide
+        // Invoke the LLM (which is coordinatorPrompt.pipe(llm))
         const result = await coordinator.invoke({
           messages: state.messages
         });
+        console.log("Coordinator: LLM raw output:", JSON.stringify(result, null, 2));
 
-        // Handle different types of message content
-        let decision = "";
+        // Parse the LLM's string output
+        let parsedDecision = "";
         if (typeof result.content === 'string') {
-          decision = result.content.toLowerCase().trim();
+          parsedDecision = result.content.replace(/`/g, "").toUpperCase().trim();
         } else if (Array.isArray(result.content)) {
-          // Handle array of content
+          // Handle array of content if necessary, though current prompt expects a single keyword
           const textContent = result.content
             .filter((item: any) => item.type === 'text')
-            .map((item: any) => item.text)
-            .join(" ");
-          decision = textContent.toLowerCase().trim();
+            .map((item: any) => item.text.replace(/`/g, "").toUpperCase().trim())
+            .join("");
+          parsedDecision = textContent;
         }
+        console.log("Coordinator: Parsed LLM decision:", parsedDecision);
 
-        // Validate the decision
-        if (decision.includes('welcome')) {
+        if (parsedDecision === 'NEEDS_WELCOME') {
+          console.log("Coordinator: Routing to: welcomeAgent, Decision: NEEDS_WELCOME");
           return { next: 'welcomeAgent' };
-        } else if (decision.includes('poem')) {
+        } else if (parsedDecision === 'NEEDS_POEM') {
+          console.log("Coordinator: Routing to: poemAgent, Decision: NEEDS_POEM");
           return { next: 'poemAgent' };
-        } else if (decision.includes('complete')) {
-          return { next: 'complete' };
+        } else if (parsedDecision === 'NEEDS_CLARIFICATION') {
+          console.log("Coordinator: Routing to: __end__, Decision: NEEDS_CLARIFICATION");
+          return { next: '__end__', lastCoordinatorDecision: 'NEEDS_CLARIFICATION' };
+        } else if (parsedDecision === 'IS_COMPLETE') {
+          console.log("Coordinator: Routing to: __end__, Decision: IS_COMPLETE");
+          return { next: '__end__', lastCoordinatorDecision: 'IS_COMPLETE' };
+        } else {
+          console.error("Coordinator: Unknown LLM decision:", parsedDecision, "Routing to __end__ as fallback.");
+          console.log("Coordinator: Routing to: __end__, Decision:", parsedDecision);
+          return { next: '__end__', lastCoordinatorDecision: parsedDecision };
         }
-        
-        // If we have both greeting and poem, default to complete
-        if (state.greeting && state.poem) {
-          return { next: 'complete' };
-        }
-        
-        // Otherwise default to welcome
-        return { next: 'welcomeAgent' };
       } catch (error) {
-        console.error('Error in coordinator node:', error);
-        return { next: 'complete' };
+        console.error('Error in coordinatorNode:', error);
+        console.log("Coordinator: Error in coordinator, routing to __end__, Decision: COORDINATOR_ERROR");
+        return { next: '__end__', lastCoordinatorDecision: 'COORDINATOR_ERROR' };
       }
     };
 
@@ -133,14 +149,14 @@ export class MultiAgent {
         const userMessage = state.messages
           .filter((m) => m.role === 'user')
           .pop()?.content || 'User';
-        
+
         // Get greeting from welcome agent
         const greeting = await this.welcomeAgent.greet(userMessage);
-        
+
         if (!greeting) {
           throw new Error("Failed to generate greeting");
         }
-        
+
         return {
           greeting,
           messages: [{ role: 'assistant', content: greeting }]
@@ -149,7 +165,7 @@ export class MultiAgent {
         console.error('Error in welcome node:', error);
         // Fallback greeting
         const fallbackGreeting = "Welcome! It's nice to meet you.";
-        
+
         return {
           greeting: fallbackGreeting,
           messages: [{ role: 'assistant', content: fallbackGreeting }]
@@ -165,14 +181,14 @@ export class MultiAgent {
             messages: [{ role: 'assistant', content: "I need a greeting first before creating a poem." }]
           };
         }
-        
+
         // Get poem from poem agent
         const poem = await this.poemAgent.composePoem(state.greeting);
-        
+
         if (!poem) {
           throw new Error("Failed to generate poem");
         }
-        
+
         return {
           poem,
           messages: [{ role: 'assistant', content: poem }]
@@ -181,7 +197,7 @@ export class MultiAgent {
         console.error('Error in poem node:', error);
         // Return a fallback poem on error
         const fallbackPoem = "Words may sometimes fail,\nBut greetings still remain.\nWelcome to our world,\nWhere connections sustain.";
-        
+
         return {
           poem: fallbackPoem,
           messages: [{ role: 'assistant', content: fallbackPoem }]
@@ -194,7 +210,7 @@ export class MultiAgent {
       .addNode("coordinator", coordinatorNode)
       .addNode("welcomeAgent", welcomeNode)
       .addNode("poemAgent", poemNode);
-    
+
     // Define edges
     workflow.addEdge("__start__", "coordinator");
     workflow.addEdge("welcomeAgent", "coordinator");
@@ -213,22 +229,36 @@ export class MultiAgent {
     this.graph = workflow.compile();
   }
 
-  async run(userInput: string): Promise<typeof AgentStateAnnotation.State> {
+  async run(userInput: string): Promise<string | null> {
     try {
       // Initialize conversation state with user input
-      const initialState = {
+      const initialState: Partial<AgentState> = { // Use Partial<AgentState> for initial state
         messages: [{ role: 'user', content: userInput }]
       };
 
       const config: RunnableConfig = {
         recursionLimit: 25 // Prevent infinite loops
       };
-      
+
       // Invoke the graph with the initial state
-      return await this.graph.invoke(initialState, config);
+      const finalState = await this.graph.invoke(initialState, config) as AgentState; // Cast to AgentState
+
+      console.log("MultiAgent.run: Final coordinator decision:", finalState.lastCoordinatorDecision);
+
+      if (finalState.lastCoordinatorDecision === 'NEEDS_CLARIFICATION') {
+        const lastMessage = finalState.messages[finalState.messages.length - 1];
+        return lastMessage?.content || "Please provide more information.";
+      } else if (finalState.lastCoordinatorDecision === 'IS_COMPLETE') {
+        const lastAssistantMessage = finalState.messages.filter(m => m.role === 'assistant').pop();
+        return lastAssistantMessage?.content || "The process is complete.";
+      } else {
+        // Handles empty, COORDINATOR_ERROR, or any other unknown decisions
+        console.log("MultiAgent.run: Unhandled or error in coordinator decision:", finalState.lastCoordinatorDecision);
+        return "An unexpected issue occurred."; // Or return null
+      }
     } catch (error) {
-      console.error('Error in MultiAgent workflow:', error);
-      throw error;
+      console.error('Error in MultiAgent.run workflow:', error);
+      return "An error occurred during processing."; // Or return null
     }
   }
 
@@ -245,10 +275,10 @@ export class MultiAgent {
       // Use the streamEvents method from LangGraph to properly get event streams
       // This allows us to tap into the graph execution events
       const eventStream = this.graph.streamEvents(initialState, { version: "v2" });
-      
+
       // Process each event as it occurs and create our custom events
       let finalResult: typeof AgentStateAnnotation.State = initialState as any;
-      
+
       for await (const evt of eventStream) {
         try {
           switch (evt.event) {
@@ -270,12 +300,12 @@ export class MultiAgent {
                 }
               }
               break;
-              
+
             case "on_node_end":
               if (evt.name && evt.data?.state) {
                 const nodeName = evt.name;
                 const state = evt.data.state;
-                
+
                 switch (nodeName) {
                   case 'coordinator':
                     if (state.next) {
@@ -293,15 +323,15 @@ export class MultiAgent {
                     }
                     break;
                 }
-                
+
                 // Always update our final result
                 finalResult = state;
               }
               break;
             case "on_chain_end":
-                finalResult = evt.data.output;
-                break;
-              
+              finalResult = evt.data.output;
+              break;
+
             // LLM events
             case "on_llm_start":
               if (evt.name) {
@@ -310,7 +340,7 @@ export class MultiAgent {
                 onEvent('thinking', 'Agent is processing...');
               }
               break;
-              
+
             case "on_llm_stream":
               if (evt.data?.chunk) {
                 onEvent('stream', `Agent is generating: ${evt.data.chunk}`);
@@ -322,7 +352,7 @@ export class MultiAgent {
           console.error('Error processing event:', err);
         }
       }
-      
+
       return finalResult;
     } catch (error) {
       console.error('Error in MultiAgent workflow:', error);

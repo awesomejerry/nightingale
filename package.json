@@ -5,7 +5,9 @@
   "scripts": {
     "dev:grpc": "nx serve grpc-server",
     "dev:web": "nx serve web-app",
-    "dev:trpc": "nx serve trpc-server"
+    "dev:trpc": "nx serve trpc-server",
+    "dev:all": "nx run-many --target=serve --projects=grpc-server,web-app,trpc-server --parallel",
+    "build:proto": "nx run proto:generate"
   },
   "private": true,
   "dependencies": {
@@ -14,6 +16,7 @@
     "@grpc/proto-loader": "^0.7.15",
     "@langchain/core": "^0.3.56",
     "@langchain/langgraph": "^0.2.72",
+    "@langchain/langgraph-supervisor": "^0.0.13",
     "@langchain/openai": "^0.5.10",
     "@tanstack/react-query": "^5.76.1",
     "@trpc/client": "^11.1.2",
